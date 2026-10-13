@@ -123,3 +123,26 @@ def alerts():
         return {"alerts": [], "note": "No alerts yet. Trigger: POST /check or wait for 9AM job."}
     lines = p.read_text().splitlines()[-20:]
     return {"alerts": lines, "note": "Forward these manually to WhatsApp until CallMeBot key works."}
+
+class SpeakReq(BaseModel):
+    text: str
+    lang: str | None = "en"
+
+@app.post("/speak")
+def speak(req: SpeakReq):
+    """Server-side voice (gTTS mp3, cached by hash). Falls back to browser speech on failure."""
+    import hashlib
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+    lang = {"hi": "hi", "mr": "mr"}.get((req.lang or "en"), "en")
+    h = hashlib.sha256(f"{lang}:{req.text}".encode()).hexdigest()[:16]
+    d = Path(__file__).parent / "static" / "tts"
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / f"{h}.mp3"
+    if not f.exists() or f.stat().st_size == 0:
+        try:
+            from gtts import gTTS
+            gTTS(text=req.text[:500], lang=lang).save(str(f))
+        except Exception as e:
+            return {"error": f"TTS unavailable ({e}). Use the browser Listen button."}
+    return FileResponse(str(f), media_type="audio/mpeg", filename=f"{h}.mp3")

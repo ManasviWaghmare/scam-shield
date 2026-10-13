@@ -44,6 +44,28 @@ def train(csv_path=DATA_PATH, save_path=MODEL_PATH):
     return acc
 
 _model = None
+_muril_pipe = None
+
+def _muril_predict(text: str):
+    """Opt-in MuRIL inference. Active only with SCAMSHIELD_MODEL=muril + trained models/muril/."""
+    import os
+    if os.getenv("SCAMSHIELD_MODEL") != "muril":
+        return None
+    global _muril_pipe
+    try:
+        if _muril_pipe is None:
+            from transformers import pipeline
+            if not (MODEL_PATH.parent / "muril" / "config.json").exists():
+                print("[classifier] SCAMSHIELD_MODEL=muril but models/muril/ missing — run train_muril.py")
+                return None
+            _muril_pipe = pipeline("text-classification",
+                                   model=str(MODEL_PATH.parent / "muril"), top_k=None)
+        out = _muril_pipe(text[:512])[0]
+        best = max(out, key=lambda x: x["score"])
+        return best["label"], float(best["score"])
+    except Exception as e:
+        print(f"[classifier] MuRIL fallback to baseline ({e})")
+        return None
 
 def get_model():
     global _model
@@ -53,6 +75,9 @@ def get_model():
 
 def predict_proba(text: str):
     """Returns (label, confidence). Falls back to rule-leaning heuristic if no model."""
+    muril = _muril_predict(text)
+    if muril is not None:
+        return muril
     model = get_model()
     if model is None:
         t = text.lower()

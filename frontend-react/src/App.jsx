@@ -46,17 +46,21 @@ export default function App() {
   const [sched, setSched] = useState(null)
   const [trends, setTrends] = useState(null)
   const [alerts, setAlerts] = useState(null)
+  const [history, setHistory] = useState(null)
+  const [stats, setStats] = useState(null)
   const [tab, setTab] = useState('text')
   const fileRef = useRef(null)
 
   const loadStatus = async () => {
     try {
-      const [s, t, a] = await Promise.all([
+      const [s, t, a, hh, st] = await Promise.all([
         fetch(`${API}/scheduler-status`).then(x => x.json()),
         fetch(`${API}/trends`).then(x => x.json()),
         fetch(`${API}/alerts`).then(x => x.json()),
+        fetch(`${API}/history?limit=6`).then(x => x.json()),
+        fetch(`${API}/stats`).then(x => x.json()),
       ])
-      setSched(s); setTrends(t); setAlerts(a)
+      setSched(s); setTrends(t); setAlerts(a); setHistory(hh); setStats(st)
     } catch { /* offline */ }
   }
   useEffect(() => { loadStatus() }, [])
@@ -89,8 +93,20 @@ export default function App() {
     finally { setLoading(false) }
   }
 
-  const speak = () => {
+  const speak = async () => {
     if (!out?.explanation) return
+    // Prefer server voice (gTTS mp3, correct HI/MR); fall back to browser speech offline.
+    try {
+      const r = await fetch(`${API}/speak`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: out.explanation, lang: out.lang }),
+      })
+      if (r.ok && (r.headers.get('content-type') || '').includes('audio')) {
+        const url = URL.createObjectURL(await r.blob())
+        new Audio(url).play()
+        return
+      }
+    } catch { /* fall through to browser speech */ }
     const u = new SpeechSynthesisUtterance(out.explanation)
     u.lang = out.lang === 'hi' ? 'hi-IN' : out.lang === 'mr' ? 'mr-IN' : 'en-IN'
     speechSynthesis.speak(u)
@@ -187,7 +203,7 @@ export default function App() {
       <main className="max-w-6xl mx-auto px-4 pb-16">
         {/* Stats row */}
         <section className="grid grid-cols-3 gap-4 mt-8 max-w-2xl mx-auto text-center">
-          {[['87.5%', 'baseline accuracy'], [String(totalScans || '—'), 'scans today'], [`${jobs.length || 5}`, 'auto jobs running']].map(([v, l]) => (
+          {[['87.5%', 'baseline accuracy'], [String(stats?.total_scans ?? totalScans ?? '—'), 'scans analysed'], [`${stats?.threat_indicators ?? '—'}`, 'threat indicators']].map(([v, l]) => (
             <div key={l} className={`rounded-2xl border ${line} py-4`}>
               <p className="text-2xl font-bold">{v}</p>
               <p className={`text-xs ${sub}`}>{l}</p>
@@ -262,11 +278,22 @@ export default function App() {
                   </ul>
                   <p className={`mt-3 text-xs ${sub}`}>Links: {(out.urls || []).join(', ') || 'none'} · Triggers: {(out.highlights || []).join(', ') || 'none'}</p>
                   {(out.model_tokens || []).length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {(out.model_tokens || []).slice(0, 6).map((t, i) => (
-                        <span key={i} title={`weight ${t.weight}`} className={`text-xs px-2 py-0.5 rounded-full border ${line}`}>{t.token}</span>
-                      ))}
-                      <span className={`text-xs ${sub}`}>model evidence</span>
+                    <div className="mt-3">
+                      <p className={`text-xs font-bold tracking-widest ${sub}`}>WHY THE MODEL VOTED {String(out.ml_label).toUpperCase()} ({((out.ml_confidence ?? 0) * 100).toFixed(0)}%)</p>
+                      <div className="mt-2 space-y-1.5">
+                        {(out.model_tokens || []).slice(0, 5).map((t, i, arr) => {
+                          const mx = Math.max(...arr.map(x => x.weight), 0.0001)
+                          return (
+                            <div key={i} className="grid grid-cols-12 items-center gap-2" title={`weight ${t.weight}`}>
+                              <span className="col-span-4 text-xs truncate">{t.token}</span>
+                              <div className={`col-span-6 h-1.5 rounded-full overflow-hidden ${track}`}>
+                                <div className="h-full bg-[#2f6bff] rounded-full" style={{ width: `${Math.max(6, Math.round((t.weight / mx) * 100))}%` }} />
+                              </div>
+                              <span className={`col-span-2 text-right text-xs font-mono ${sub}`}>{t.weight.toFixed(3)}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
                   <div className="mt-4 flex gap-2 flex-wrap">
@@ -298,6 +325,20 @@ export default function App() {
                   <span className="col-span-2 text-right font-mono font-bold text-sm">{r.count}</span>
                 </div>
               ))}
+            </div>
+            <div className={`mt-6 pt-4 border-t ${line}`}>
+              <p className={`text-xs font-bold tracking-widest ${sub}`}>RECENT CHECKS · ANONYMISED</p>
+              <div className="mt-2 space-y-1.5">
+                {((history?.history) ?? []).length === 0 && <p className={`text-sm ${sub}`}>No checks yet.</p>}
+                {((history?.history) ?? []).map((h, i) => (
+                  <div key={i} className="flex items-center gap-2.5 text-sm">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${h.verdict === 'Scam' ? 'bg-red-500' : h.verdict === 'Suspicious' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                    <span className="font-medium">{h.verdict}</span>
+                    <span className={`truncate ${sub}`}>{h.category} · {String(h.lang).toUpperCase()} · {(h.score * 100).toFixed(0)}%</span>
+                    <span className={`ml-auto text-xs font-mono shrink-0 ${sub}`}>{String(h.created_at).slice(5, 16)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
           <div className="space-y-6">
