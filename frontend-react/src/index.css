@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { --accent: #2f6bff; }
+
+html { background: #04070f; }
+body {
+  font-family: "Outfit", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: #04070f;
+  color: #f4f6fb;
+}
+
+.card {
+  background: rgba(13, 20, 36, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.btn-primary {
+  background: #2f6bff;
+  color: #ffffff;
+  border-radius: 999px;
+  font-weight: 600;
+  box-shadow: 0 0 24px rgba(47, 107, 255, 0.45);
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+.btn-primary:hover { background: #245ae0; }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.6; }
+
+.btn-ghost {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  font-weight: 500;
+  color: #e5e9f2;
+  transition: border-color 0.2s ease, transform 0.15s ease;
+}
+.btn-ghost:hover { border-color: #2f6bff; }
+.btn-ghost:active { transform: scale(0.98); }
+
+.field-label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #8b94a7; }
+
+/* starfield */
+.stars {
+  background-image: radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 30%, transparent 75%);
+}
+
+/* glowing shield */
+.shield-glow {
+  background: radial-gradient(closest-side, rgba(47,107,255,0.55), rgba(47,107,255,0.12) 60%, transparent 75%);
+  filter: blur(10px);
+}
+.shield {
+  width: 210px;
+  height: 250px;
+  background: linear-gradient(180deg, #4c86ff 0%, #2f6bff 45%, #1a3fa0 100%);
+  clip-path: polygon(50% 0%, 100% 12%, 100% 52%, 50% 100%, 0% 52%, 0% 12%);
+  filter: drop-shadow(0 0 34px rgba(47, 107, 255, 0.65));
+  position: relative;
+}
+.shield-inner {
+  position: absolute;
+  inset: 5px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.02) 55%);
+  clip-path: polygon(50% 0%, 100% 12%, 100% 52%, 50% 100%, 0% 52%, 0% 12%);
+}
+.keyhole { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); }
+.keyhole .hole-top { width: 52px; height: 52px; border-radius: 999px; background: #04070f; margin: 0 auto; }
+.keyhole .hole-bottom { width: 34px; height: 62px; margin: -12px auto 0; background: #04070f; clip-path: polygon(18% 0, 82% 0, 100% 100%, 0% 100%); }
+
+/* earth horizon */
+.horizon {
+  height: 120px;
+  border-top: 2px solid rgba(90, 140, 255, 0.9);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  box-shadow: 0 -12px 60px rgba(47, 107, 255, 0.55), 0 -2px 18px rgba(120, 170, 255, 0.8);
+}
+.dotgrid {
+  background-image: radial-gradient(rgba(140, 170, 255, 0.35) 1px, transparent 1px);
+  background-size: 11px 11px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+/* ticker */
+.ticker-track { display: flex; gap: 2.5rem; white-space: nowrap; animation: ticker 28s linear infinite; width: max-content; }
+@keyframes ticker { to { transform: translateX(-50%); } }
+
+.rise { animation: rise 0.45s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+.skeleton {
+  background: linear-gradient(90deg, #131c33 25%, #1b2745 50%, #131c33 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton, .ticker-track, .rise { animation: none; }
+}

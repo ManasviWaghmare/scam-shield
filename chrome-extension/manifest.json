@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Scam Shield — check before you tap",
+  "version": "1.0.0",
+  "description": "Select any suspicious message, right-click or use the popup to get a Safe/Suspicious/Scam verdict from your local Scam Shield API.",
+  "permissions": ["contextMenus", "storage", "notifications"],
+  "host_permissions": ["http://127.0.0.1:8001/*"],
+  "icons": { "128": "icon.png" },
+  "action": { "default_popup": "popup.html", "default_title": "Scam Shield", "default_icon": "icon.png" },
+  "background": { "service_worker": "bg.js" }
+}

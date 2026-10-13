@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.joblib
+*.db
+*.log
+models/
+venv/
+.venv/
+.env
+node_modules/
+dist/
+vite.config.*.timestamp*

@@ -1,0 +1,14 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+apscheduler==3.10.4
+scikit-learn==1.5.2
+joblib==1.4.2
+pandas==2.2.3
+requests==2.32.3
+pytesseract==0.3.10
+Pillow==10.4.0
+gTTS==2.5.4
+python-multipart==0.0.19
+# Heavy (optional, for MuRIL fine-tune later):
+# torch==2.4.1
+# transformers==4.44.2
