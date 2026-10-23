@@ -82,6 +82,8 @@ export default function Chat({ c }) {
             category: r.verdict.category || '',
           } : null,
           generator: r.generator,
+          safety: r.safety_notice,
+          abstained: r.abstained,
         })
         setBusy(false)
         return
@@ -136,19 +138,33 @@ export default function Chat({ c }) {
                 )}
                 <p className="whitespace-pre-line">{m.text}</p>
                 {m.evidence && (
-                  <p className="mt-1.5 text-xs opacity-70">
-                    Evidence: {m.evidence}{m.generator ? ` · ${m.generator}` : ''}
+                  <p className="mt-1.5 text-xs opacity-70 flex items-center gap-2 flex-wrap">
+                    <span>Evidence: {m.evidence}</span>
+                    {m.generator && (
+                      <span className="px-1.5 py-0.5 rounded border border-[#2f6bff]/40 text-[#7ea2ff]">
+                        {m.generator === 'hosted' ? 'LLM' : 'Offline mode'}
+                      </span>
+                    )}
+                  </p>
+                )}
+                {m.abstained && (
+                  <p className="mt-1.5 text-xs text-amber-400">
+                    ⚠ Not enough trusted evidence — this answer is not grounded in a source.
                   </p>
                 )}
                 {(m.citations || []).length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {(m.citations || []).map(ci => (
-                      <a key={ci.id} href={ci.url} target="_blank" rel="noreferrer" title={ci.title}
+                      <a key={ci.id} href={ci.url} target="_blank" rel="noreferrer"
+                        title={ci.passage ? `${ci.title} — ${ci.passage.slice(0, 160)}` : ci.title}
                         className="text-xs px-2 py-0.5 rounded-full border border-[#2f6bff]/50 text-[#7ea2ff]">
                         [{ci.id}] {ci.title.slice(0, 28)}
                       </a>
                     ))}
                   </div>
+                )}
+                {m.safety && (
+                  <p className="mt-1.5 text-[11px] opacity-70 border-l-2 border-amber-500/70 pl-2">{m.safety}</p>
                 )}
                 {m.verdict && (
                   <a href="#/" className="underline text-xs opacity-80">Open full analysis on Home →</a>

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { checkMessage, checkImage, speakServerSide, speakBrowser } from '../lib/api.js'
+import FusionBreakdown from '../components/FusionBreakdown.jsx'
 
 const SAMPLES = [
   { label: 'KYC fraud', lang: 'en', text: 'Dear customer your SBI KYC expired urgently verify at http://sbi-kyc-update.xyz within 24 hours else account blocked' },
@@ -25,6 +26,8 @@ export default function Home({ c, data, refresh }) {
   const [error, setError] = useState('')
   const [tab, setTab] = useState('text')
   const fileRef = useRef(null)
+  const recognitionRef = useRef(null)
+  const [listening, setListening] = useState(false)
 
   const trendRows = (trends?.trends ?? []).slice().sort((a, b) => b.count - a.count)
   const totalScans = stats?.total_scans ?? trendRows.reduce((n, r) => n + r.count, 0)
@@ -55,6 +58,58 @@ export default function Home({ c, data, refresh }) {
   const speak = async () => {
     if (!out?.explanation) return
     if (!(await speakServerSide(out.explanation, out.lang))) speakBrowser(out.explanation, out.lang)
+  }
+
+  const startVoice = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      setError('Voice input not supported in this browser. Try Chrome.')
+      return
+    }
+    try {
+      const rec = new SpeechRecognition()
+      rec.lang = lang === 'hi' ? 'hi-IN' : lang === 'mr' ? 'mr-IN' : 'en-IN'
+      rec.interimResults = false
+      rec.maxAlternatives = 1
+      recognitionRef.current = rec
+      setListening(true)
+      setError('')
+      rec.onresult = (e) => {
+        const transcript = e.results[0][0].transcript
+        if (transcript) {
+          setMsg(transcript)
+          setTab('text')
+        }
+      }
+      rec.onend = () => setListening(false)
+      rec.onerror = () => {
+        setListening(false)
+        setError('Voice input failed. Please try again.')
+      }
+      rec.start()
+    } catch {
+      setListening(false)
+      setError('Could not start voice input.')
+    }
+  }
+
+  const stopVoice = () => {
+    try {
+      recognitionRef.current?.stop()
+    } catch {}
+    setListening(false)
+  }
+
+  const pasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (!text.trim()) { setError('Clipboard is empty.'); return }
+      setMsg(text.slice(0, 4000))
+      setTab('text')
+      setError('')
+    } catch {
+      setError('Clipboard permission denied — paste manually with Ctrl+V.')
+    }
   }
 
   return (
@@ -133,6 +188,12 @@ export default function Home({ c, data, refresh }) {
                 <button key={s.label} onClick={() => { setMsg(s.text); setLang(s.lang); setTab('text') }} className={c.chip}>{s.label}</button>
               ))}
             </div>
+            <div className="mt-3 flex gap-2 flex-wrap">
+              <button onClick={listening ? stopVoice : startVoice} className={`btn-ghost text-sm px-4 py-2 ${listening ? 'animate-pulse' : ''}`}>
+                {listening ? '● Listening… (stop)' : '🎙️ Voice input'}
+              </button>
+              <button onClick={pasteFromClipboard} className="btn-ghost text-sm px-4 py-2">📋 Paste</button>
+            </div>
             <button onClick={check} disabled={loading} className="btn-primary w-full py-3 mt-4">{loading ? 'Analysing…' : 'Analyse now'}</button>
             {error && <p className="mt-3 text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-2xl p-3">{error}</p>}
             <p className={`text-xs mt-2 ${c.sub}`}>Scheduler: {sched?.running ? `live (${jobs.length} jobs)` : 'offline'} · <a className="underline" href="#/dashboard">open dashboard</a></p>
@@ -160,8 +221,11 @@ export default function Home({ c, data, refresh }) {
                   <span className={`text-3xl font-bold ${vs.big}`}>{(out.score * 100).toFixed(0)}%</span>
                   <span className={`text-xs ml-auto ${c.sub}`}>{out.category} · {out.lang?.toUpperCase()}</span>
                 </div>
-                <div className={`mt-3 h-2 rounded-full overflow-hidden ${c.track}`}>
-                  <div className={`h-full ${vs.bar}`} style={{ width: `${Math.round(out.score * 100)}%` }} />
+                <div className={`mt-3 h-2.5 rounded-full overflow-hidden ${c.track} relative`}>
+                  <div className={`h-full ${vs.bar} transition-all duration-700`} style={{ width: `${Math.round(out.score * 100)}%` }} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[10px] font-bold tracking-widest mix-blend-difference">CONFIDENCE {(out.score * 100).toFixed(0)}%</span>
+                  </div>
                 </div>
                 <p className="mt-4 text-sm leading-relaxed">{out.explanation}</p>
                 <ul className="mt-3 space-y-1.5">
@@ -169,19 +233,27 @@ export default function Home({ c, data, refresh }) {
                     <li key={i} className="text-sm border-l-2 border-[#2f6bff] pl-3 opacity-90">{s}</li>
                   ))}
                 </ul>
+                <FusionBreakdown c={c} result={out} />
                 {(out.model_tokens || []).length > 0 && (
-                  <div className="mt-3">
+                  <div className="mt-4">
                     <p className={`text-xs font-bold tracking-widest ${c.sub}`}>WHY THE MODEL VOTED {String(out.ml_label).toUpperCase()}</p>
+                    <p className={`mt-1 text-xs ${c.sub}`}>Hover tokens for weight — higher = stronger signal</p>
                     <div className="mt-2 space-y-1.5">
-                      {(out.model_tokens || []).slice(0, 5).map((t, i, arr) => {
+                      {(out.model_tokens || []).slice(0, 6).map((t, i, arr) => {
                         const mx = Math.max(...arr.map(x => x.weight), 0.0001)
+                        const pct = Math.max(10, Math.round((t.weight / mx) * 100))
                         return (
-                          <div key={i} className="grid grid-cols-12 items-center gap-2">
-                            <span className="col-span-4 text-xs truncate">{t.token}</span>
+                          <div key={i} className="grid grid-cols-12 items-center gap-2 group relative">
+                            <span className="col-span-4 text-xs truncate cursor-help" title={`Token: "${t.token}" | Weight: ${t.weight.toFixed(4)} | Importance: ${pct}%`}>{t.token}</span>
                             <div className={`col-span-6 h-1.5 rounded-full overflow-hidden ${c.track}`}>
-                              <div className="h-full bg-[#2f6bff] rounded-full" style={{ width: `${Math.max(6, Math.round((t.weight / mx) * 100))}%` }} />
+                              <div className="h-full bg-[#2f6bff] rounded-full transition-all group-hover:bg-[#3b82ff]" style={{ width: `${pct}%` }} />
                             </div>
                             <span className={`col-span-2 text-right text-xs font-mono ${c.sub}`}>{t.weight.toFixed(3)}</span>
+                            <div className="absolute left-0 -top-8 hidden group-hover:block z-10">
+                              <div className={`${c.panel} border ${c.line} px-2 py-1 rounded-lg text-[10px] shadow-xl`}>
+                                <span className="font-mono">{t.token}</span> • weight {t.weight.toFixed(4)}
+                              </div>
+                            </div>
                           </div>
                         )
                       })}
@@ -191,7 +263,13 @@ export default function Home({ c, data, refresh }) {
                 <div className="mt-4 flex gap-2 flex-wrap">
                   <button onClick={speak} className="btn-ghost text-sm px-4 py-2">Listen</button>
                   <a href="tel:1930" className="btn-primary text-sm px-4 py-2">Call 1930</a>
-                  <a href="https://cybercrime.gov.in" target="_blank" rel="noreferrer" className="btn-ghost text-sm px-4 py-2">Report</a>
+                  <a href={`https://cybercrime.gov.in/?complaint=${encodeURIComponent(`ScamShield Alert - Verdict: ${out.verdict} | Score: ${(out.score*100).toFixed(0)}% | Category: ${out.category} | Message (redacted): ${msg.replace(/\b[6-9]\d{9}\b/g,'[PHONE]').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,'[EMAIL]')}`)}`} target="_blank" rel="noreferrer" className="btn-ghost text-sm px-4 py-2">Report to Cybercrime</a>
+                  <button onClick={() => {
+                    const text = `🚨 ScamShield Verdict: ${out.verdict} (${(out.score*100).toFixed(0)}%) | ${out.category}\n${out.explanation}\n\nChecked via ScamShield — https://github.com/ManasviWaghmare/scam-shield`
+                    if (navigator.share) navigator.share({ title: 'ScamShield Result', text }).catch(()=>{})
+                    else { navigator.clipboard?.writeText(text); alert('Result copied to clipboard') }
+                  }} className="btn-ghost text-sm px-4 py-2">Share</button>
+                  <a href={`https://wa.me/?text=${encodeURIComponent(`🚨 ScamShield: ${out.verdict} (${(out.score*100).toFixed(0)}%) — ${out.category}\n${out.explanation}`)}`} target="_blank" rel="noreferrer" className="btn-ghost text-sm px-4 py-2">Forward on WhatsApp</a>
                 </div>
               </div>
             )}

@@ -1,5 +1,6 @@
 """Scheduler layer — the differentiator in your submission.
-4 jobs: threat refresh, trend aggregation, privacy purge, daily tip.
+6 jobs: threat refresh, trend aggregation, privacy purge, daily tip,
+standup nudge, alert review-queue collect.
 Runs inside FastAPI lifespan via APScheduler (Asia/Kolkata).
 """
 from datetime import date
@@ -26,10 +27,13 @@ SCAM_TIPS = {
 }
 
 def refresh_threat_intel():
-    """Every 6h: sync malicious URL cache. Tries live PhishTank feed, falls back to seed list."""
+    """Every 6h: sync malicious URL cache. Tries live PhishTank feed, falls back to seed list.
+    Phase 3 trigger: newly-verified domains fire a WhatsApp Cloud API scam alert."""
     print("[Scheduler] Refreshing threat intel...")
     try:
         live = 0
+        new_domains = []
+        had_existing = bool(db.lookup_threat(KNOWN_BAD[0][0]) is not None) or _threat_cache_has_rows()
         try:
             import requests
             from urllib.parse import urlparse
@@ -39,16 +43,36 @@ def refresh_threat_intel():
                     url = entry.get("url", "")
                     host = urlparse(url).netloc.lower() if url else ""
                     if host:
+                        if db.lookup_threat(host) is None:
+                            new_domains.append(host)
                         db.upsert_threat(host, "domain", True)
                         live += 1
                 print(f"[Scheduler] Live PhishTank sync: {live} domains.")
         except Exception as e:
             print(f"[Scheduler] Live feed skipped ({e}); using seed list.")
         for indicator, kind, mal in KNOWN_BAD:
+            if db.lookup_threat(indicator) is None and had_existing:
+                new_domains.append(indicator)
             db.upsert_threat(indicator, kind, mal)
         print(f"[Scheduler] Threat cache updated ({live} live + {len(KNOWN_BAD)} seed).")
+        # WhatsApp alert only when genuinely new threats appear after the first sync
+        if new_domains and had_existing:
+            try:
+                from whatsapp_cloud import threat_alert
+                threat_alert(new_domains[:5])
+            except Exception as e:
+                print(f"[Scheduler] WhatsApp alert skipped: {e}")
     except Exception as e:
         print(f"[Scheduler] Threat refresh failed: {e}")
+
+def _threat_cache_has_rows() -> bool:
+    try:
+        conn = db.get_conn()
+        row = conn.execute("SELECT COUNT(*) c FROM threat_cache").fetchone()
+        conn.close()
+        return bool(row and row["c"])
+    except Exception:
+        return False
 
 def aggregate_trends():
     """Every 1h: rebuild anonymized category counts for /trends dashboard."""
@@ -102,6 +126,16 @@ def standup_nudge():
     except Exception as e:
         print(f"[Scheduler] WhatsApp standup failed: {e}")
 
+def collect_alert_queue():
+    """Every 6h: fetch scam-news feeds into data/pending.csv (the review queue).
+    Rows go out only after approved=yes — see alert_pipeline.send_approved()."""
+    print("[Scheduler] Collecting alert review queue...")
+    try:
+        import alert_pipeline
+        alert_pipeline.collect()
+    except Exception as e:
+        print(f"[Scheduler] Alert collect failed: {e}")
+
 def start_scheduler():
     if scheduler.running:
         return
@@ -110,8 +144,15 @@ def start_scheduler():
     scheduler.add_job(privacy_purge, CronTrigger(hour=0, minute=5), id="purge", replace_existing=True)
     scheduler.add_job(daily_tip_push, CronTrigger(hour=9, minute=0), id="tip", replace_existing=True)
     scheduler.add_job(standup_nudge, CronTrigger(hour=21, minute=5), id="standup", replace_existing=True)
+    scheduler.add_job(collect_alert_queue, CronTrigger(hour="*/6", minute=30), id="alert_queue", replace_existing=True)
     scheduler.start()
     print("[Scheduler] Started. Jobs:", [j.id for j in scheduler.get_jobs()])
     # run once at boot so demo has data immediately
     refresh_threat_intel()
     aggregate_trends()
+    try:
+        import alert_pipeline
+        if not alert_pipeline.PENDING.exists():
+            collect_alert_queue()
+    except Exception as e:
+        print(f"[Scheduler] Boot collect skipped: {e}")

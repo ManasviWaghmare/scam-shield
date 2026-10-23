@@ -3,6 +3,7 @@ const LINKS = [
   ['#/dashboard', 'Dashboard'],
   ['#/learn', 'Learn'],
   ['#/chat', 'Assistant'],
+  ['#/subscribe', 'Alerts'],
   ['#/about', 'About'],
 ]
 

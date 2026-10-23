@@ -69,3 +69,36 @@ export function speakBrowser(text, lang) {
   u.lang = lang === 'hi' ? 'hi-IN' : lang === 'mr' ? 'mr-IN' : 'en-IN'
   speechSynthesis.speak(u)
 }
+
+async function jsonOrThrow(r, fallback) {
+  if (r.ok) return r.json()
+  const err = await r.json().catch(() => ({}))
+  throw new Error(err.detail || fallback || `request failed ${r.status}`)
+}
+
+export async function subscribeAlerts(phone, name, consent) {
+  return jsonOrThrow(await fetch(`${API}/alerts/subscribe`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, name, consent }),
+  }), 'Subscription failed')
+}
+
+export async function pendingAlerts(adminKey) {
+  return jsonOrThrow(await fetch(`${API}/alerts/pending`, {
+    headers: adminKey ? { 'X-Admin-Key': adminKey } : {},
+  }), 'Could not load review queue')
+}
+
+export async function approveAlert(item, adminKey) {
+  return jsonOrThrow(await fetch(`${API}/alerts/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(adminKey ? { 'X-Admin-Key': adminKey } : {}) },
+    body: JSON.stringify({ url: item.url, how_it_works: item.how_it_works, action: item.action }),
+  }), 'Approval failed')
+}
+
+export async function sendApprovedAlerts(adminKey) {
+  return jsonOrThrow(await fetch(`${API}/alerts/send`, {
+    method: 'POST', headers: adminKey ? { 'X-Admin-Key': adminKey } : {},
+  }), 'Send failed')
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Scam Shield — SMS & WhatsApp Scam Detector",
+  "short_name": "Scam Shield",
+  "description": "AI guardian for messages. Scan SMS and WhatsApp forwards in English, Hindi and Marathi for KYC, UPI, lottery and job scams.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#04070f",
+  "theme_color": "#04070f",
+  "orientation": "portrait-primary",
+  "lang": "en-IN",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Scan a message", "url": "/#/" },
+    { "name": "Ask the assistant", "url": "/#/chat" },
+    { "name": "Dashboard", "url": "/#/dashboard" }
+  ]
+}

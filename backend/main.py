@@ -1,7 +1,7 @@
 """Scam Shield API — FastAPI + APScheduler."""
 import hashlib
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -133,6 +133,114 @@ def alerts():
         return {"alerts": [], "note": "No alerts yet. Trigger: POST /check or wait for 9AM job."}
     lines = p.read_text().splitlines()[-20:]
     return {"alerts": lines, "note": "Forward these manually to WhatsApp until CallMeBot key works."}
+
+class AlertTestReq(BaseModel):
+    phone: str | None = None
+    scam_type: str = "Electricity Bill Fraud"
+    description: str = "Fake call claiming power will be cut in 30 minutes"
+    action: str = "Do not click the link or share OTP. Call 1930 if you already paid."
+
+@app.post("/alerts/test")
+def alert_test(req: AlertTestReq):
+    """Phase 4 sandbox: send the approved template to one number (or queue it)."""
+    import whatsapp_cloud
+    from notify_whatsapp import _env
+    phone = req.phone or (_env("ALERT_PHONES", "").split(",")[0].strip() or None)
+    if not phone:
+        return {"ok": False, "error": "No phone. Pass phone=91XXXXXXXXXX or set ALERT_PHONES in .env."}
+    payload = whatsapp_cloud.build_payload(phone, req.scam_type, req.description, req.action)
+    if not whatsapp_cloud.is_configured():
+        from notify_whatsapp import _log_outbox
+        _log_outbox(whatsapp_cloud.alert_body(req.scam_type, req.description, req.action))
+        return {"ok": False, "queued": True, "configured": False,
+                "note": "WA_CLOUD_TOKEN/WA_PHONE_NUMBER_ID not set — rendered to GET /alerts instead.",
+                "payload": payload}
+    return {"ok": True, "configured": True, **whatsapp_cloud.send_template(phone, req.scam_type, req.description, req.action)}
+
+@app.post("/alerts/collect")
+def alerts_collect():
+    """Phase 3: fill the review queue now (scheduler also runs it every 6h)."""
+    import alert_pipeline
+    return alert_pipeline.collect()
+
+@app.post("/alerts/send")
+def alerts_send():
+    """Phase 3: send approved=yes rows to active subscribers (consent-gated)."""
+    import alert_pipeline
+    return alert_pipeline.send_approved()
+
+class SubscribeIn(BaseModel):
+    phone: str
+    name: str = ""
+    consent: bool = False
+
+@app.post("/alerts/subscribe")
+def alerts_subscribe(body: SubscribeIn):
+    """Web opt-in form → consent recorded in data/subscribers.csv (status=active)."""
+    import alert_pipeline
+    if not body.consent:
+        raise HTTPException(400, "Consent is required to receive alerts")
+    digits = "".join(ch for ch in body.phone if ch.isdigit())
+    if not (10 <= len(digits) <= 15):
+        raise HTTPException(400, "Enter a valid WhatsApp number with country code (10-15 digits)")
+    row = alert_pipeline.add_subscriber(digits, body.name.strip()[:60], "web opt-in form")
+    return {"status": "subscribed", "phone": row["phone"],
+            "consent_source": row["consent_source"], "consent_date": row["consent_date"]}
+
+class ApproveIn(BaseModel):
+    url: str
+    how_it_works: str
+    action: str
+
+def _admin_ok(request: Request) -> bool:
+    """ADMIN_KEY set → require X-Admin-Key. Unset → localhost only."""
+    from notify_whatsapp import _env
+    key = _env("ADMIN_KEY")
+    if not key:
+        host = (request.client.host if request.client else "") or ""
+        return host in ("127.0.0.1", "::1", "localhost")
+    return request.headers.get("x-admin-key") == key
+
+@app.get("/alerts/pending")
+def alerts_pending(request: Request):
+    """Review queue (admin). Middleware-free simple gate — see _admin_ok."""
+    import alert_pipeline
+    if not _admin_ok(request):
+        raise HTTPException(403, "Admin key required")
+    rows = alert_pipeline.load_pending()
+    queue = [r for r in rows if r.get("approved", "").lower() != "yes" and r.get("status") != "sent"]
+    return {"pending": queue[-50:], "total": len(rows), "awaiting_review": len(queue)}
+
+@app.post("/alerts/approve")
+def alerts_approve(body: ApproveIn, request: Request):
+    """Fill the two required text fields and set approved=yes (admin)."""
+    import alert_pipeline
+    if not _admin_ok(request):
+        raise HTTPException(403, "Admin key required")
+    if not body.how_it_works.strip() or not body.action.strip():
+        raise HTTPException(400, "Both how_it_works and action are required before approval")
+    row = alert_pipeline.approve_pending(body.url, body.how_it_works, body.action)
+    if not row:
+        raise HTTPException(404, "Alert not found in the review queue")
+    return {"status": "approved", "row": row}
+
+@app.get("/whatsapp/webhook")
+def whatsapp_webhook_verify(request: Request):
+    """Meta webhook verification handshake (Phase 3 / STOP handling).
+    Meta sends dotted params: hub.mode, hub.verify_token, hub.challenge."""
+    from fastapi.responses import PlainTextResponse
+    from notify_whatsapp import _env
+    q = request.query_params
+    if q.get("hub.mode") == "subscribe" and q.get("hub.verify_token") == _env("WA_VERIFY_TOKEN", "scamshield"):
+        return PlainTextResponse(q.get("hub.challenge") or "")
+    return {"error": "verification failed", "hint": "set WA_VERIFY_TOKEN in backend/.env and the same in Meta console"}
+
+@app.post("/whatsapp/webhook")
+def whatsapp_webhook(body: dict):
+    """Inbound WhatsApp messages (STOP/START) + delivery status callbacks."""
+    import alert_pipeline
+    result = alert_pipeline.handle_webhook(body)
+    return {"ok": True, **result}
 
 class SpeakReq(BaseModel):
     text: str

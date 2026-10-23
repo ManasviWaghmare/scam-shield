@@ -1,0 +1,2 @@
+phone,name,status,consent_date,consent_source
+919876543210,Replace with your number (set status=active only after editing),stopped,2026-10-23,example row - never active by default

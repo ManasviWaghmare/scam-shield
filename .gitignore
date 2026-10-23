@@ -10,3 +10,7 @@ venv/
 node_modules/
 dist/
 vite.config.*.timestamp*
+# consent + review data (never commit subscriber numbers)
+backend/data/subscribers.csv
+backend/data/pending.csv
+backend/data/sent_log.csv
