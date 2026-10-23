@@ -20,7 +20,16 @@ async def lifespan(app: FastAPI):
         scheduler.shutdown()
 
 app = FastAPI(title="Scam Shield", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+import os as _os
+_origins = [o.strip() for o in _os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["*"], allow_headers=["*"])
+
+try:
+    from assistant.routes import router as assistant_router
+    app.include_router(assistant_router)
+    print("[Scam Shield] Assistant routes enabled (/assistant/chat, /sources, /health).")
+except Exception as e:
+    print(f"[Scam Shield] Assistant disabled ({e}). Scanner endpoints unaffected.")
 
 class CheckReq(BaseModel):
     message: str
@@ -33,7 +42,7 @@ def mask_pii(text: str) -> str:
     text = re.sub(r"\b\d{4,6}\b", "***OTP?***", text)
     return text
 
-def full_check(message: str, lang=None):
+def full_check(message: str, lang=None, log: bool = True):
     lang = lang or explainer.detect_lang(message)
     ml_label, ml_conf = classifier.predict_proba(message)
     rule_out = rules.analyze(message, lookup_fn=db.lookup_threat)
@@ -48,9 +57,10 @@ def full_check(message: str, lang=None):
         if tok not in highlights and len(tok) > 2:
             highlights.append(tok)
     masked = mask_pii(message)
-    # privacy: store only hash, never raw text
+    # privacy: store only hash, never raw text (assistant re-analysis passes log=False)
     h = hashlib.sha256(message.encode()).hexdigest()[:16]
-    db.log_scan(h, category, verdict, score, lang)
+    if log:
+        db.log_scan(h, category, verdict, score, lang)
     return {
         "verdict": verdict,
         "score": score,

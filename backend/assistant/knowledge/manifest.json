@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "documents": [
+    {"id": "SRC-001", "file": "SRC-001-kyc-fraud.md", "title": "Fake KYC and bank-impersonation fraud", "url": "https://www.rbi.org.in", "topics": ["kyc", "bank", "account", "blocked", "verify"]},
+    {"id": "SRC-002", "file": "SRC-002-upi-otp.md", "title": "UPI, OTP and PIN safety", "url": "https://www.npci.org.in", "topics": ["upi", "otp", "pin", "refund", "payment"]},
+    {"id": "SRC-003", "file": "SRC-003-phishing-links.md", "title": "Spotting phishing links", "url": "https://cybercrime.gov.in", "topics": ["link", "url", "website", "phishing", "tap"]},
+    {"id": "SRC-004", "file": "SRC-004-job-scams.md", "title": "Advance-fee job scams", "url": "https://cybercrime.gov.in", "topics": ["job", "earning", "fee", "part-time", "task"]},
+    {"id": "SRC-005", "file": "SRC-005-lottery.md", "title": "Lottery and prize fraud", "url": "https://cybercrime.gov.in", "topics": ["lottery", "prize", "winner", "claim"]},
+    {"id": "SRC-006", "file": "SRC-006-digital-arrest.md", "title": "Digital-arrest and impersonation threats", "url": "https://cybercrime.gov.in", "topics": ["police", "arrest", "custody", "cbi", "threat"]},
+    {"id": "SRC-007", "file": "SRC-007-reporting.md", "title": "Reporting cyber fraud in India", "url": "https://cybercrime.gov.in", "topics": ["report", "1930", "complaint", "helpline", "fraud"]},
+    {"id": "SRC-008", "file": "SRC-008-hygiene.md", "title": "Password and PIN hygiene", "url": "https://www.rbi.org.in", "topics": ["password", "pin", "otp", "secret", "hygiene"]},
+    {"id": "SRC-009", "file": "SRC-009-seniors.md", "title": "Protecting senior citizens", "url": "https://cybercrime.gov.in", "topics": ["senior", "elderly", "family", "safety"]},
+    {"id": "SRC-010", "file": "SRC-010-verdicts.md", "title": "Understanding Scam Shield verdicts", "url": "https://github.com/ManasviWaghmare/scam-shield", "topics": ["verdict", "score", "scam shield", "how"]}
+  ]
+}
